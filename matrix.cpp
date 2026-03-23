@@ -1,6 +1,7 @@
 #include "matrix.h"
 
 #include <sstream>
+#include <iostream>
 #include <iomanip>
 
 Matrix::Matrix(int m, int n) : matx(n, Vector(m))
@@ -18,6 +19,11 @@ Matrix::Matrix(std::initializer_list<std::initializer_list<double>> arr)
     {
         matx.emplace_back(*itr);
     }
+}
+Matrix::Matrix(std::string matxFile)
+{
+    //TODO
+    (void)matxFile;
 }
 Matrix::Matrix(const Matrix &other)
 {
@@ -201,21 +207,21 @@ bool Matrix::isInjective() const
 {
     if (nCols > nRows) return false;
     int nPiv = 0;
-    genericREF([](int,int){}, [&nPiv](int,double){++nPiv;}, [](int,int, double){});
+    genericREF([](int,int){}, [&nPiv](int,double){++nPiv;}, [](int,int,double){});
     return nPiv == nCols;
 }
 bool Matrix::isSurjective() const
 {
     if (nRows > nCols) return false;
     int nPiv = 0;
-    genericREF([](int,int){}, [&nPiv](int,double){++nPiv;}, [](int,int, double){});
+    genericREF([](int,int){}, [&nPiv](int,double){++nPiv;}, [](int,int,double){});
     return nPiv == nRows;
 }
 bool Matrix::isBijective() const
 {
     if (nCols != nRows) return false;
     int nPiv = 0;
-    genericREF([](int,int){}, [&nPiv](int,double){++nPiv;}, [](int,int, double){});
+    genericREF([](int,int){}, [&nPiv](int,double){++nPiv;}, [](int,int,double){});
     return nPiv == nCols;
 }
 bool Matrix::sameSizeAs(const Matrix &other) const
@@ -225,77 +231,16 @@ bool Matrix::sameSizeAs(const Matrix &other) const
 
 
 // Methods
-Matrix Matrix::getREF() const
+Matrix Matrix::getREF(Flags flags)
 {
-    return genericREF([](int,int){}, [](int,double){}, [](int,int, double){});
+    return rowReductionFlagPreprocessor(flags);
 }
-Matrix Matrix::getREF(Matrix &aug) const
+Matrix Matrix::getREF(Matrix &aug, Flags flags)
 {
-    return genericREF([&aug](int a,int b){aug.swapRow(a,b);}, 
-                      [&aug](int a,double b){aug.scaleRow(a,b);}, 
-                      [&aug](int a,int b, double c){aug.addRow(a,b,c);});
-}
-Matrix Matrix::getRREF() const
-{
-    return genericREF([](int,int){}, [](int,double){}, [](int,int, double){}, true);
-}
-Matrix Matrix::getRREF(Matrix &aug) const
-{
-    return genericREF([&aug](int a,int b){aug.swapRow(a,b);}, 
-                      [&aug](int a,double b){aug.scaleRow(a,b);}, 
-                      [&aug](int a,int b, double c){aug.addRow(a,b,c);}, true);
-}
-Matrix Matrix::genericREF(std::function<void(int,int)> swap, 
-                          std::function<void(int,double)> scale, 
-                          std::function<void(int,int, double)> add, bool toRREF) const
-{
-    Matrix matRREF(*this);
-
-    std::vector<int> pivots; // The pivot at index i in this array is at location (pivots[i], i) in the matrix
-    double temp;
-
-    // For each column, try to find a row with a pivot and 
-    // use it to eliminate the other elements in that column
-    for (int c = 0; c < nCols; ++c) 
-    {
-        int pivotRow = -1; // Find a row with a nonzero element
-        for (int r = pivots.size(); r < nRows; ++r) {
-            if (matRREF[c][r] != 0) { // Found pivot
-                pivotRow = r;
-                pivots.push_back(c);
-                break;
-            }
-        }
-        if (pivotRow == -1) continue; // There is no pivot in this column, try next
-        // Reduce pivot to 1 then move it to the ith pivot spot
-        temp = 1/matRREF[c][pivotRow];
-        matRREF.scaleRow(pivotRow, temp);
-        scale(pivotRow, temp);
-        matRREF.swapRow(pivotRow, pivots.size()-1);
-        swap(pivotRow, pivots.size()-1);
-        
-        // For all non pivot columns remove value in pivot
-        for (int r = pivots.size(); r < nRows; ++r)
-        {
-            temp = -matRREF[c][r];
-            matRREF.addRow(r, pivotRow, temp);
-            add(r, pivotRow, temp);
-        }
-    }
-    if (!toRREF) return matRREF; 
-
-    // Continue to RREF
-    for (int i = pivots.size()-1; i >= 0; --i)
-    {
-        for (int j = i-1; j >= 0; --j)
-        {
-            temp = -matRREF[pivots[i]][j];
-            matRREF.addRow(j, i, temp);
-            add(j,i,temp);
-        }
-    }
-
-    return matRREF;
+    return rowReductionFlagPreprocessor(flags, 
+                    {[&aug](int a,int b){aug.swapRow(a,b);}}, 
+                    {[&aug](int a,double b){aug.scaleRow(a,b);}}, 
+                    {[&aug](int a,int b,double c){aug.addRow(a,b,c);}});
 }
 Matrix Matrix::getInverse() const
 {
@@ -314,7 +259,7 @@ double Matrix::getDeterminant() const
     // it into RREF, keeping track of every time where it swaps or scales rows
     // beacuse these operations change the determinant. 
     double d = 1;
-    genericREF([&d](int a,int b){if (a != b) d *= -1;}, [&d](int r,double c){d *= c;}, [](int,int, double){}, true);
+    genericREF([&d](int,int){d *= -1;}, [&d](int,double c){d *= c;}, [](int,int,double){});
     // We invert each of these changes to recover the determinant.
     return 1/d;
 }
@@ -345,6 +290,7 @@ void Matrix::scaleRow(int r, double c) // r <- r * c
 void Matrix::addRow(int r, int r1, double c) // r <- r + r1 * c
 {
     if (r >= nRows || r1 >= nRows) throw new std::out_of_range("Rows must be in matrix");
+    if (c == 0) return;
     for (int col = 0; col < nCols; ++col)
     {
         matx[col][r] += matx[col][r1] * c;
@@ -384,4 +330,103 @@ std::string Matrix::toString(const Matrix &aug) const
         if (r < nRows-1) ss << "\n";
     }
     return ss.str();
+}
+std::string Matrix::getLog() const
+{
+    return logStream.str();
+}
+
+// row reduction algorithm
+Matrix Matrix::rowReductionFlagPreprocessor(Flags flags, 
+                    const std::vector<std::function<void(int,int)>> swapL, 
+                    const std::vector<std::function<void(int,double)>> scaleL, 
+                    const std::vector<std::function<void(int,int,double)>> addL)
+{
+    std::vector<std::function<void(int,int)>> swapList = swapL;
+    std::vector<std::function<void(int,double)>> scaleList = scaleL;
+    std::vector<std::function<void(int,int,double)>> addList = addL;
+
+    // Process flags to add elements to the function lists
+    if (flags & Flags::LogOp) {
+        swapList.push_back([this](int a,int b){this->logStream << "r" << a << " <-> r" << b << std::endl;});
+        scaleList.push_back([this](int a,double b){this->logStream << "r" << a << " <- r" << a << " * " << b << std::endl;});
+        addList.push_back([this](int a,int b,double c){this->logStream << "r" << a << " <- r" << a << " + r" << b << " * " << c << std::endl;});
+    }
+
+    // Compile lists into functions that call every element
+    std::function<void(int,int)> swap = [&swapList](int a,int b) {
+        for (auto itr = swapList.begin(); itr != swapList.end(); ++itr) (*itr)(a,b);
+    };
+    std::function<void(int,double)> scale = [&scaleList](int a,double b) {
+        for (auto itr = scaleList.begin(); itr != scaleList.end(); ++itr) (*itr)(a,b);
+    };
+    std::function<void(int,int,double)> add = [&addList](int a,int b,double c) {
+        for (auto itr = addList.begin(); itr != addList.end(); ++itr) (*itr)(a,b,c);
+    };
+
+    return genericREF(swap, scale, add, flags & Flags::RREF);
+}
+
+Matrix Matrix::genericREF(std::function<void(int,int)> swap, 
+                          std::function<void(int,double)> scale, 
+                          std::function<void(int,int,double)> add, bool toRREF) const
+{
+    Matrix matRREF(*this);
+
+    std::vector<int> pivots; // The pivot at index i in this array is at location (pivots[i], i) in the matrix
+    double temp;
+
+    // For each column, try to find a row with a pivot and 
+    // use it to eliminate the other elements in that column
+    for (int c = 0; c < nCols; ++c) 
+    {
+        int pivotRow = -1; // Find a row with a nonzero element
+        for (int r = pivots.size(); r < nRows; ++r) {
+            if (matRREF[c][r] != 0) { // Found pivot
+                pivotRow = r;
+                pivots.push_back(c);
+                break;
+            }
+        }
+        if (pivotRow == -1) continue; // There is no pivot in this column, try next
+
+        // Reduce pivot to 1 then move it to the ith pivot spot
+        temp = 1/matRREF[c][pivotRow];
+        matRREF.scaleRow(pivotRow, temp);
+        scale(pivotRow, temp);
+        if (pivotRow != (int)(pivots.size()-1))
+        {
+            matRREF.swapRow(pivotRow, pivots.size()-1);
+            swap(pivotRow, pivots.size()-1);
+        }
+        pivotRow = pivots.size()-1;
+        
+        // For all non pivot columns remove value in pivot
+        for (int r = pivots.size(); r < nRows; ++r)
+        {
+            temp = -matRREF[c][r];
+            if (temp != 0)
+            {    
+                matRREF.addRow(r, pivotRow, temp);
+                add(r, pivotRow, temp);
+            }
+        }
+    }
+    if (!toRREF) return matRREF; 
+
+    // Continue to RREF
+    for (int i = pivots.size()-1; i >= 0; --i)
+    {
+        for (int j = i-1; j >= 0; --j)
+        {
+            temp = -matRREF[pivots[i]][j];
+            if (temp != 0)
+            {   
+                matRREF.addRow(j, i, temp);
+                add(j,i,temp);
+            }
+        }
+    }
+
+    return matRREF;
 }

@@ -10,12 +10,10 @@ int main(int argc, char *argv[])
     Matrix I3 = Matrix::identity(3);
 
 
-    Matrix A({{3,0,2}, {2,1,2}, {2,3,3}});
-    Matrix B_inv({{3,1,1},{2,1,0},{1,0,0}});
-
-    Matrix b({{-2,0,4}});
-    Matrix A_inv = I3;
-
-    Matrix A_prime = A.getRREF(A_inv);
-    std::cout << A_prime.toString(A_inv) << std::endl;
+    Matrix A({{0,1,0,2,0}, {2,0,2,0,3}, {2,0,3,0,5}, {0,2,0,6,0}, {2,0,4,0,8}});
+    Matrix A_prime = A.getREF(Flags::LogOp);
+    std::cout << A.toString() << std::endl << '\n';
+    std::cout << A.getLog() << '\n';
+    std::cout << A_prime.toString() << std::endl;
+    std::cout << "det(A)=" << A.getDeterminant() << std::endl;
 }

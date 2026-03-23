@@ -4,8 +4,15 @@
 #include "vector.h"
 #include <vector>
 #include <string>
+#include <sstream>
 #include <initializer_list>
 #include <functional>
+
+enum Flags : uint8_t {
+    Empty = 0,
+    RREF  = 1 << 0,
+    LogOp = 1 << 1,
+};
 
 class Matrix
 {
@@ -13,6 +20,7 @@ class Matrix
     // Constructors
     Matrix(int m, int n);
     Matrix(std::initializer_list<std::initializer_list<double>> arr);
+    Matrix(std::string matxFile);
     Matrix(const Matrix &other);
     ~Matrix();
     static Matrix identity(int n);
@@ -38,10 +46,8 @@ class Matrix
     bool isBijective() const;
 
     // Methods
-    Matrix getREF() const;
-    Matrix getREF(Matrix &aug) const;
-    Matrix getRREF() const;
-    Matrix getRREF(Matrix &aug) const;
+    Matrix getREF(Flags flags = Flags::Empty);
+    Matrix getREF(Matrix &aug, Flags flags = Flags::Empty);
     Matrix getInverse() const;
     double getDeterminant() const;
     
@@ -52,17 +58,25 @@ class Matrix
 
     std::string toString() const;
     std::string toString(const Matrix &aug) const;
+    std::string getLog() const;
 
     
     private:
+    // Matrix data
     int nCols, nRows;
-    int print_width = 2;
-    // The matrix is stored as a an array of columns
     std::vector<Vector> matx;
 
+    // Non-essential object data
+    int print_width = 2;
+    std::stringstream logStream;
+
+    Matrix rowReductionFlagPreprocessor(Flags flags, 
+                    const std::vector<std::function<void(int,int)>> swapL = {}, 
+                    const std::vector<std::function<void(int,double)>> scaleL = {}, 
+                    const std::vector<std::function<void(int,int,double)>> addL = {});
     Matrix genericREF(std::function<void(int,int)> swap, 
                       std::function<void(int,double)> scale, 
-                      std::function<void(int,int, double)> add, bool toRREF = false) const;
+                      std::function<void(int,int,double)> add, bool toRREF = false) const;
     int numPivots() const;
 };
 
